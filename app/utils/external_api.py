@@ -17,6 +17,32 @@ class OpenFoodFactsClient:
             10
         )
     
+    def fetch_product_details(self, barcode=None, product_name=None, page=1, page_size=1):
+        """Fetch product details using barcode or product name."""
+        if barcode:
+            return self.get_product_by_barcode(barcode)
+
+        if product_name:
+            search_result = self.search_products(product_name, page=page, page_size=page_size)
+            if search_result.get('status') == 'success':
+                products = search_result.get('data', {}).get('products', [])
+                if products:
+                    return {
+                        'status': 'success',
+                        'data': products[0]
+                    }
+                return {
+                    'status': 'not_found',
+                    'message': 'No products found for provided name',
+                    'product_name': product_name
+                }
+            return search_result
+
+        return {
+            'status': 'error',
+            'message': 'Either barcode or product_name must be provided'
+        }
+
     def get_product_by_barcode(self, barcode):
         """
         Fetch product details by barcode.
@@ -66,6 +92,10 @@ class OpenFoodFactsClient:
                 'status': 'error',
                 'message': str(e)
             }
+
+    def search_products_by_name(self, name, page=1, page_size=20):
+        """Search products by name using OpenFoodFacts search endpoint."""
+        return self.search_products(name, page=page, page_size=page_size)
     
     def search_products(self, name, page=1, page_size=20):
         """

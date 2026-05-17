@@ -80,3 +80,35 @@ def search_products(name):
         status_code = 500
     
     return result, status_code
+
+
+@external_bp.route('/search', methods=['GET'])
+def search_products_query():
+    """Search products by name using OpenFoodFacts or mock database."""
+    query = request.args.get('query')
+    if not query:
+        return {
+            'status': 'error',
+            'message': 'Query parameter is required'
+        }, 400
+
+    # Try mock database first
+    mock_results = mock_search(query)
+
+    if mock_results:
+        return {
+            'status': 'success',
+            'data': mock_results
+        }, 200
+
+    # Fallback to real OpenFoodFacts API
+    client = OpenFoodFactsClient()
+    results = client.search_products_by_name(query)
+
+    status_code = 200
+    if results.get('status') == 'error':
+        status_code = 500
+    elif results.get('status') == 'not_found':
+        status_code = 404
+
+    return results, status_code

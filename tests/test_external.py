@@ -164,6 +164,74 @@ class TestOpenFoodFactsClient:
         assert result['status'] == 'error'
         assert 'timed out' in result['message'].lower()
 
+    def test_fetch_product_details_by_barcode(self, app):
+        """Test fetching product details by barcode."""
+        mock_response = {
+            'status': 1,
+            'product': {
+                'product_name': 'Detailed Product',
+                'brands': 'Mock Brand',
+                'quantity': '750ml',
+                'nutriscore_grade': 'A',
+                'categories': 'Beverages > Juice',
+                'image_url': 'https://example.com/image.jpg',
+                'ingredients_text': 'Water, fruit juice concentrate'
+            }
+        }
+
+        with patch('requests.get') as mock_get:
+            mock_get.return_value = MagicMock(
+                json=lambda: mock_response,
+                raise_for_status=lambda: None
+            )
+
+            with app.app_context():
+                client = OpenFoodFactsClient()
+                result = client.fetch_product_details(barcode='1234567890123')
+
+        assert result['status'] == 'success'
+        assert result['data']['product_name'] == 'Detailed Product'
+        assert result['data']['categories'] == 'Beverages > Juice'
+
+    def test_fetch_product_details_by_name(self, app):
+        """Test fetching product details by product name."""
+        mock_response = {
+            'products': [
+                {
+                    'product_name': 'Search Result',
+                    'brands': 'Search Brand',
+                    'quantity': '1kg',
+                    'nutriscore_grade': 'B',
+                    'categories': 'Groceries',
+                    'image_url': 'https://example.com/item.jpg',
+                    'code': '9999999999999'
+                }
+            ]
+        }
+
+        with patch('requests.get') as mock_get:
+            mock_get.return_value = MagicMock(
+                json=lambda: mock_response,
+                raise_for_status=lambda: None
+            )
+
+            with app.app_context():
+                client = OpenFoodFactsClient()
+                result = client.fetch_product_details(product_name='Search Result')
+
+        assert result['status'] == 'success'
+        assert result['data']['product_name'] == 'Search Result'
+        assert result['data']['barcode'] == '9999999999999'
+
+    def test_fetch_product_details_missing_parameters(self, app):
+        """Test fetching product details without barcode or name."""
+        with app.app_context():
+            client = OpenFoodFactsClient()
+            result = client.fetch_product_details()
+
+        assert result['status'] == 'error'
+        assert 'must be provided' in result['message'].lower()
+
 
 class TestExternalAPIRoutes:
     """Test cases for external API routes."""

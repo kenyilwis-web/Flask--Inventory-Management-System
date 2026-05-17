@@ -1,8 +1,10 @@
 """Click CLI commands for Inventory Management System."""
 import click
 import json
+import requests
 import sys
 from pathlib import Path
+from requests.exceptions import RequestException
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,6 +16,37 @@ from app.utils.mock_database import (
     get_product_by_barcode as mock_get_product,
     search_products_by_name as mock_search
 )
+
+API_DEFAULT_BASE_URL = 'http://127.0.0.1:5000'
+
+
+def api_request(method, endpoint, base_url=None, **kwargs):
+    """Send an HTTP request to the inventory API."""
+    base_url = base_url or API_DEFAULT_BASE_URL
+    url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
+    try:
+        response = requests.request(method, url, timeout=10, **kwargs)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except requests.exceptions.HTTPError:
+        try:
+            return response.json(), response.status_code
+        except ValueError:
+            return {'status': 'error', 'message': f'HTTP error {response.status_code}'}, response.status_code
+    except RequestException as exc:
+        return {'status': 'error', 'message': str(exc)}, None
+
+
+def format_item(item):
+    """Return a formatted string for inventory item display."""
+    return (
+        f"[{item.get('id')}] {item.get('name')} (SKU: {item.get('sku')})\n"
+        f"    Quantity: {item.get('quantity')} | Price: ${item.get('price', 0.0):.2f}\n"
+        f"    Category: {item.get('category') or 'N/A'}\n"
+        f"    Barcode: {item.get('barcode') or 'N/A'}\n"
+        f"    Description: {item.get('description') or 'N/A'}"
+    )
 
 
 @click.group()
@@ -215,6 +248,168 @@ def low_stock():
             click.echo(f"[{item.id}] {item.name}")
             click.echo(f"    Current: {item.quantity} | Min: {item.min_stock}")
             click.echo()
+
+
+@cli.group()
+def api():
+    """Interact with the inventory REST API."""
+    pass
+
+
+@api.command('list')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+@click.option('--category', '-c', help='Filter by category')
+@click.option('--page', '-p', default=1, type=int, help='Page number')
+@click.option('--per-page', default=20, type=int, help='Items per page')
+def api_list(base_url, category, page, per_page):
+    """List inventory items through the REST API."""
+    params = {'page': page, 'per_page': per_page}
+    if category:
+        params['category'] = category
+
+    data, status = api_request('GET', '/inventory', base_url=base_url, params=params)
+
+    if status != 200 or data.get('status') != 'success':
+        click.echo(f"Error: {data.get('message', 'Unable to fetch inventory')}" , err=True)
+        return
+
+    items = data.get('data', {}).get('items', [])
+    if not items:
+        click.echo('No items found.')
+        return
+
+    for item in items:
+        click.echo(format_item(item))
+        click.echo()
+
+
+@api.command('get')
+@click.argument('item_id')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+def api_get(item_id, base_url):
+    """Get inventory item details from the REST API."""
+    data, status = api_request('GET', f'/inventory/{item_id}', base_url=base_url)
+
+    if status != 200:
+        click.echo(f"Error: {data.get('message', 'Item not found')}" , err=True)
+        return
+
+    item = data.get('data')
+    click.echo(format_item(item))
+
+
+@api.command('add')
+@click.argument('name')
+@click.argument('sku')
+@click.option('--barcode', '-b', help='Product barcode')
+@click.option('--description', '-d', help='Product description')
+@click.option('--quantity', '-q', default=0, type=int, help='Initial quantity')
+@click.option('--price', '-p', default=0.0, type=float, help='Unit price')
+@click.option('--category', '-c', help='Product category')
+@click.option('--min-stock', '-m', default=0, type=int, help='Minimum stock threshold')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+def api_add(name, sku, barcode, description, quantity, price, category, min_stock, base_url):
+    """Add a new inventory item through the REST API."""
+    payload = {
+        'name': name,
+        'sku': sku,
+        'barcode': barcode,
+        'description': description,
+        'quantity': quantity,
+        'price': price,
+        'category': category,
+        'min_stock': min_stock
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    data, status = api_request('POST', '/inventory', base_url=base_url, json=payload)
+
+    if status != 201:
+        click.echo(f"Error: {data.get('message', 'Unable to create item')}" , err=True)
+        return
+
+    item = data.get('data')
+    click.echo(f"Item created successfully: {item.get('name')} (ID: {item.get('id')})")
+
+
+@api.command('update')
+@click.argument('item_id')
+@click.option('--name', '-n', help='Product name')
+@click.option('--sku', '-s', help='SKU')
+@click.option('--barcode', '-b', help='Product barcode')
+@click.option('--description', '-d', help='Product description')
+@click.option('--quantity', '-q', type=int, help='Quantity')
+@click.option('--price', '-p', type=float, help='Unit price')
+@click.option('--category', '-c', help='Product category')
+@click.option('--min-stock', '-m', type=int, help='Minimum stock threshold')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+def api_update(item_id, name, sku, barcode, description, quantity, price, category, min_stock, base_url):
+    """Update an inventory item through the REST API."""
+    payload = {
+        'name': name,
+        'sku': sku,
+        'barcode': barcode,
+        'description': description,
+        'quantity': quantity,
+        'price': price,
+        'category': category,
+        'min_stock': min_stock
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    if not payload:
+        click.echo('No update fields were provided.', err=True)
+        return
+
+    data, status = api_request('PATCH', f'/inventory/{item_id}', base_url=base_url, json=payload)
+
+    if status != 200:
+        click.echo(f"Error: {data.get('message', 'Unable to update item')}" , err=True)
+        return
+
+    item = data.get('data')
+    click.echo(f"Item updated successfully: {item.get('name')} (ID: {item.get('id')})")
+
+
+@api.command('delete')
+@click.argument('item_id')
+@click.option('--force', '-f', is_flag=True, help='Skip confirmation prompt')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+def api_delete(item_id, force, base_url):
+    """Delete an inventory item through the REST API."""
+    if not force and not click.confirm(f"Delete item {item_id}?"):
+        click.echo('Cancelled.')
+        return
+
+    data, status = api_request('DELETE', f'/inventory/{item_id}', base_url=base_url)
+
+    if status != 200:
+        click.echo(f"Error: {data.get('message', 'Unable to delete item')}" , err=True)
+        return
+
+    click.echo(f"Item deleted successfully: {item_id}")
+
+
+@api.command('find')
+@click.argument('query')
+@click.option('--base-url', default=API_DEFAULT_BASE_URL, help='Base URL for the REST API')
+def api_find(query, base_url):
+    """Find inventory items by name through the REST API."""
+    params = {'q': query}
+    data, status = api_request('GET', '/inventory/search', base_url=base_url, params=params)
+
+    if status != 200 or data.get('status') != 'success':
+        click.echo(f"Error: {data.get('message', 'Unable to search inventory')}" , err=True)
+        return
+
+    items = data.get('data', {}).get('items', [])
+    if not items:
+        click.echo(f"No items found matching '{query}'.")
+        return
+
+    for item in items:
+        click.echo(format_item(item))
+        click.echo()
 
 
 @cli.group()

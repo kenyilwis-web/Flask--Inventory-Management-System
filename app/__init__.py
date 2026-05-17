@@ -20,9 +20,11 @@ def create_app(config_name=None):
     # Register blueprints
     from app.routes.inventory import inventory_bp
     from app.routes.external import external_bp
+    from app.routes.rest_inventory import rest_inventory_bp
     
     app.register_blueprint(inventory_bp, url_prefix='/api')
     app.register_blueprint(external_bp, url_prefix='/api/external')
+    app.register_blueprint(rest_inventory_bp, url_prefix='')  # Root level /inventory endpoints
     
     # Create database tables
     with app.app_context():
