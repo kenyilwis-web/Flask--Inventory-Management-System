@@ -1,57 +1,71 @@
 # Flask Inventory Management System
 
-A Flask-based REST API for managing inventory with CRUD operations, OpenFoodFacts external API integration, and CLI interface.
+A maintainable Flask application for inventory management using REST API endpoints, CLI commands, and OpenFoodFacts enrichment.
 
-## Features
+## Overview
 
-- **REST API** — Full CRUD operations for inventory management
-- **External API Integration** — Fetch product details from OpenFoodFacts by barcode or name
-- **CLI Interface** — Command-line tools for managing inventory
-- **Unit Tests** — Comprehensive test coverage
+This project provides:
 
-## Project Structure
+- RESTful inventory CRUD operations
+- External product lookup via OpenFoodFacts
+- A Click-based CLI for inventory management
+- In-memory storage for quick local development
+- Unit tests covering API, CLI, and external integration
+
+## Repository Structure
 
 ```
 Flask--Inventory-Management-System/
 ├── app/
-│   ├── __init__.py          # Flask app factory
-│   ├── models.py            # SQLAlchemy models
+│   ├── __init__.py          # Flask app factory and blueprint registration
+│   ├── models.py            # SQLAlchemy inventory model
+│   ├── storage.py           # Temporary in-memory storage and external enrichment helpers
 │   ├── routes/
-│   │   ├── inventory.py     # Inventory CRUD routes
-│   │   └── external.py       # External API routes
+│   │   ├── inventory.py     # Inventory CRUD and utility API routes
+│   │   ├── external.py      # External OpenFoodFacts product routes
+│   │   └── rest_inventory.py# Root-level REST inventory endpoints using in-memory storage
 │   └── utils/
-│       └── external_api.py   # OpenFoodFacts client
+│       ├── external_api.py  # OpenFoodFacts API client
+│       └── mock_database.py # Mock product database for offline development/testing
 ├── cli/
-│   ├── commands.py          # Click CLI commands
+│   ├── commands.py          # CLI command definitions
 │   └── __main__.py          # CLI entry point
 ├── tests/
-│   ├── test_inventory.py    # Inventory API tests
-│   └── test_external.py    # External API tests
-├── config.py                # Configuration settings
+│   ├── test_inventory.py    # Flask inventory route tests
+│   ├── test_external.py     # External API client and endpoint tests
+│   └── test_cli_api.py      # CLI command tests
+├── config.py                # Configuration classes
 ├── requirements.txt         # Python dependencies
 ├── run.py                   # Application entry point
-└── SPEC.md                  # Specification document
+└── README.md                # Project documentation
 ```
+
+## Prerequisites
+
+- Python 3.12+
+- `pip` package manager
 
 ## Installation
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Running the Server
+## Running the Application
+
+Start the Flask server:
 
 ```bash
 python run.py
 ```
 
-Or via CLI:
+The server should be available at:
 
-```bash
-python -m cli server
+```text
+http://0.0.0.0:5000
 ```
-
-The server will start on `http://0.0.0.0:5000`
 
 ## API Endpoints
 
@@ -59,75 +73,83 @@ The server will start on `http://0.0.0.0:5000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/items` | List all inventory items |
-| GET | `/api/items/<id>` | Get single item by ID |
-| POST | `/api/items` | Create new inventory item |
-| PUT | `/api/items/<id>` | Update existing item |
-| DELETE | `/api/items/<id>` | Delete an item |
+| GET | `/api/items` | List inventory items with pagination and optional category filter |
+| GET | `/api/items/<id>` | Retrieve a single inventory item by ID |
+| POST | `/api/items` | Create a new inventory item |
+| PUT | `/api/items/<id>` | Update an existing inventory item |
+| DELETE | `/api/items/<id>` | Remove an inventory item |
 
-### External API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/external/barcode/<barcode>` | Fetch product by barcode |
-| GET | `/api/external/search/<name>` | Search products by name |
-
-### Utility Endpoints
+### External Product Lookup
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/items/low-stock` | Get items below min_stock |
-| GET | `/api/categories` | List all categories |
+| GET | `/api/external/barcode/<barcode>` | Retrieve product details from OpenFoodFacts by barcode |
+| GET | `/api/external/search/<name>` | Search OpenFoodFacts products by name |
+
+### Inventory Utilities
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/items/low-stock` | List inventory items with quantity below minimum stock |
+| GET | `/api/categories` | Retrieve unique inventory categories |
 
 ## CLI Commands
 
 ### Inventory Management
 
 ```bash
-# List all items
+# List inventory items
 python -m cli items list
 
-# Add new item
-python -m cli items add "Product Name" SKU-001 --quantity 10 --price 9.99
+# Add a new item
+python -m cli items add "Product Name" SKU-001 --quantity 10 --price 9.99 --category "Beverages"
 
-# Update item
-python -m cli items update 1 --quantity 20
+# Update stock or price
+python -m cli items update 1 --quantity 20 --price 11.50
 
-# Delete item
-python -m cli items delete 1
+# Delete an item
+python -m cli items delete 1 --force
 
-# Search items
+# Search items by name
 python -m cli items search "milk"
 
-# Low stock items
+# Show low-stock inventory
 python -m cli items low-stock
 ```
 
-### External API
+### External Product Search
 
 ```bash
-# Fetch by barcode
+# Lookup by barcode
 python -m cli external barcode 1234567890123
 
-# Search products
+# Search products by name
 python -m cli external search "organic milk"
 ```
 
-### Server
+### API Interaction via CLI
 
 ```bash
-# Start development server
-python -m cli server
-python -m cli server --host 127.0.0.1 --port 8080
+# List inventory via API
+python -m cli api list
+
+# Get a specific item via API
+python -m cli api get <item_id>
+
+# Add item via API
+python -m cli api add "New Product" SKU-002 --quantity 5 --price 7.50
+
+# Update item via API
+python -m cli api update <item_id> --quantity 10 --price 8.25
+
+# Delete item via API
+python -m cli api delete <item_id> --force
+
+# Search inventory via API
+python -m cli api find "milk"
 ```
 
-## Running Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-## Example API Usage
+## Example cURL Requests
 
 ### Create Item
 
@@ -146,31 +168,38 @@ curl -X POST http://localhost:5000/api/items \
   }'
 ```
 
-### Get All Items
+### Fetch All Items
 
 ```bash
 curl http://localhost:5000/api/items
 ```
 
-### Get Low Stock Items
+### Lookup Product by Barcode
 
 ```bash
-curl http://localhost:5000/api/items/low-stock
+curl http://localhost:5000/api/external/barcode/1234567890123
 ```
 
-## Configuration
+## Testing
 
-Edit `config.py` to modify:
+Run the full test suite with:
 
-- Database URL
-- OpenFoodFacts API settings
-- Server host/port
-- Debug mode
+```bash
+python -m pytest tests/ -v
+```
 
-## Technology Stack
+## Development Notes
 
-- **Framework**: Flask 3.x
-- **Database**: SQLite (SQLAlchemy ORM)
-- **External API**: OpenFoodFacts
-- **CLI**: Click
-- **Testing**: pytest
+- `app/storage.py` contains temporary storage and OpenFoodFacts enrichment logic.
+- `app/utils/external_api.py` encapsulates external API requests and normalization.
+- `app/routes/inventory.py` exposes production inventory CRUD routes.
+- `cli/commands.py` provides a developer-friendly interface for both local and API-based inventory operations.
+- Use `config.py` to manage environment and API settings.
+
+## Maintainability
+
+- Keep route handlers small and focused on one responsibility.
+- Add or update tests whenever you change API behavior or CLI commands.
+- Keep configuration values in `config.py` rather than hard-coding.
+- Use the mock database in `app/utils/mock_database.py` for offline testing.
+- Document API changes clearly in this README so the project remains easy to use.
